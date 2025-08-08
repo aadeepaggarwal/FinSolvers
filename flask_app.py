@@ -758,4 +758,6 @@ if __name__ == '__main__':
     print("   • View query history")
     print("   • Download results as JSON")
     
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    # Get port from environment (for cloud deployment) or default to 5001
+    port = int(os.environ.get('PORT', 5001))
+    app.run(host='0.0.0.0', port=port, debug=False)
