@@ -14,10 +14,10 @@ A complete end-to-end Retrieval-Augmented Generation (RAG) system for natural la
 
 ## Installation
 
-1. **Clone or download the files**:
+1. **Clone the repository**:
    ```bash
-   # Files needed:
-   # - rag_policy_qa.py
+   git clone https://github.com/aadeepaggarwal/FinSolvers.git
+   cd FinSolvers
    # - requirements.txt
    ```
 
