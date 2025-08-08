@@ -20,6 +20,7 @@ import os
 import json
 import time
 import tempfile
+import requests
 from werkzeug.utils import secure_filename
 from pathlib import Path
 
@@ -52,6 +53,144 @@ def index():
                          document_loaded=current_document is not None,
                          stats=processing_stats,
                          history_count=len(query_history))
+
+@app.route('/api/v1/hackrx/run', methods=['POST'])
+def hackrx_endpoint():
+    """
+    HackRx 6.0 Competition API Endpoint
+    
+    Processes policy documents and answers questions as required by the hackathon.
+    
+    Expected Request Format:
+    {
+        "documents": "https://example.com/policy.pdf",
+        "questions": ["Question 1", "Question 2", ...]
+    }
+    
+    Returns:
+    {
+        "answers": ["Answer 1", "Answer 2", ...]
+    }
+    """
+    try:
+        # Check authentication
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({
+                'error': 'Missing or invalid Authorization header',
+                'status': 'error'
+            }), 401
+        
+        # Get request data
+        if not request.is_json:
+            return jsonify({
+                'error': 'Content-Type must be application/json',
+                'status': 'error'
+            }), 400
+        
+        data = request.get_json()
+        
+        # Validate required fields
+        if 'documents' not in data or 'questions' not in data:
+            return jsonify({
+                'error': 'Missing required fields: documents and questions',
+                'status': 'error'
+            }), 400
+        
+        document_url = data['documents']
+        questions = data['questions']
+        
+        if not isinstance(questions, list) or len(questions) == 0:
+            return jsonify({
+                'error': 'Questions must be a non-empty list',
+                'status': 'error'
+            }), 400
+        
+        # Initialize RAG system if not already done
+        global rag_system
+        if rag_system is None:
+            rag_system = RAGPolicyQA()
+        
+        # Download and process document
+        import requests
+        import tempfile
+        
+        # Download the PDF document
+        response = requests.get(document_url, timeout=30)
+        response.raise_for_status()
+        
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+            temp_file.write(response.content)
+            temp_pdf_path = temp_file.name
+        
+        try:
+            # Process the document
+            result = rag_system.process_document(temp_pdf_path)
+            if not result:
+                return jsonify({
+                    'error': 'Failed to process document',
+                    'status': 'error'
+                }), 500
+            
+            # Process each question
+            answers = []
+            for question in questions:
+                try:
+                    query_result = rag_system.query(question)
+                    
+                    if query_result and hasattr(query_result, 'decision') and hasattr(query_result, 'justification'):
+                        # Use structured response with justification
+                        answer = query_result.justification
+                    else:
+                        # Fallback to simple string response
+                        answer = str(query_result) if query_result else "Unable to process this question."
+                    
+                    answers.append(answer)
+                    
+                except Exception as e:
+                    # Handle individual question errors gracefully
+                    answers.append(f"Error processing question: {str(e)}")
+            
+            # Return response in required format
+            return jsonify({
+                'answers': answers
+            })
+        
+        finally:
+            # Cleanup temporary file
+            try:
+                os.unlink(temp_pdf_path)
+            except:
+                pass
+    
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            'error': f'Failed to download document: {str(e)}',
+            'status': 'error'
+        }), 400
+    
+    except Exception as e:
+        return jsonify({
+            'error': f'Internal server error: {str(e)}',
+            'status': 'error'
+        }), 500
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for monitoring."""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'FinSolvers RAG Policy QA',
+        'version': '1.0.0',
+        'timestamp': time.time(),
+        'endpoints': [
+            '/api/v1/hackrx/run',
+            '/upload',
+            '/query',
+            '/health'
+        ]
+    })
 
 @app.route('/upload', methods=['POST'])
 def upload_file():

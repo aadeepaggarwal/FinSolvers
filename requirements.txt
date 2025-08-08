@@ -5,6 +5,8 @@ scikit-learn>=1.3.0
 numpy>=1.24.0
 openai>=0.27.0
 flask>=2.3.0
+requests>=2.31.0
+gunicorn>=21.2.0
 
 # Additional useful packages
 python-dotenv>=1.0.0  # For environment variable management
